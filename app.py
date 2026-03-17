@@ -1,31 +1,30 @@
 import streamlit as st
 from ultralytics import YOLO
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 
-# Titel
 st.title("Kühlschrank-Objekterkennung (YOLOv8)")
 
-# Modell laden (einmalig cached auf Streamlit Cloud)
 @st.cache_resource
 def load_model():
-    return YOLO("yolov8n.pt")  # vortrainiertes leichtes YOLOv8 Modell
+    return YOLO("yolov8n.pt")
 
 model = load_model()
 
-# Bild hochladen
-uploaded_file = st.file_uploader("Bild deines Kühlschranks hochladen", type=["jpg", "jpeg", "png"])
+uploaded_file = st.file_uploader("Bild hochladen", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
     image = Image.open(uploaded_file)
-    st.image(image, caption="Hochgeladenes Bild", use_column_width=True)
+    st.image(image, caption="Originalbild", use_column_width=True)
 
     img_array = np.array(image)
 
-    # Objekterkennung
     results = model(img_array)[0]
 
     detections = []
+
+    # Bounding Boxes manuell mit PIL zeichnen
+    draw = ImageDraw.Draw(image)
 
     for box in results.boxes:
         conf = float(box.conf)
@@ -33,11 +32,12 @@ if uploaded_file:
         label = model.names[cls]
         if conf > 0.5:
             detections.append((label, conf))
+            x1, y1, x2, y2 = box.xyxy[0]  # Bounding Box
+            draw.rectangle([x1, y1, x2, y2], outline="red", width=2)
+            draw.text((x1, y1-10), f"{label} {int(conf*100)}%", fill="red")
 
-    # Nach Wahrscheinlichkeit sortieren
     detections = sorted(detections, key=lambda x: x[1], reverse=True)
 
-    # Ergebnis anzeigen
     st.subheader("Erkannte Objekte")
     if detections:
         for label, conf in detections:
@@ -45,7 +45,5 @@ if uploaded_file:
     else:
         st.write("Keine Objekte erkannt (Confidence > 0.5)")
 
-    # Bild mit Bounding Boxes anzeigen
     st.subheader("Visualisierung")
-    plotted_image = results.plot()
-    st.image(plotted_image, caption="Erkannte Objekte", use_column_width=True)
+    st.image(image, caption="Erkannte Objekte mit Bounding Boxes", use_column_width=True)
